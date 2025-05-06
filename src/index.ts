@@ -148,11 +148,26 @@ async function main() {
           isError: false,
         };
       } catch (err) {
+        console.error('[DEBUG] Caught fetch error in tool:', err);
+ 
+        let errorMessage = 'An unknown error occurred during A2A call.';
+        if (err instanceof Error) {
+          // Check if it's a system error with a code (like FetchError)
+          if ('code' in err && typeof err.code === 'string') {
+            errorMessage = `A2A fetch failed. Code: ${err.code}`;
+          } else {
+            // Otherwise, use the standard error message (like our thrown A2A errors)
+            errorMessage = err.message;
+          }
+        } else {
+          errorMessage = String(err); // Fallback for non-Error objects
+        }
+ 
         return {
           content: [
             {
               type: 'text',
-              text: (err as Error).message,
+              text: errorMessage,
             },
           ],
           isError: true,
