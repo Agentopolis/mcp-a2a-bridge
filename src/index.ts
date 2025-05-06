@@ -2,6 +2,10 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
+import fetch from 'node-fetch';
+
+console.error(`[DEBUG] Node version: ${process.versions.node}`);
+console.error(`[DEBUG] Type of fetch: ${typeof fetch}`);
 
 // Node 18+ includes global `fetch` so no additional dependency needed.
 
@@ -43,6 +47,9 @@ async function sendA2ARequest(
 // Minimal bridging implementation
 // -----------------------------
 
+// Check if we should mock A2A calls
+const MOCK_A2A_CALLS = process.env.MOCK_A2A === 'true';
+
 // Currently, we implement only tasks/send exposure as an MCP tool.
 const A2A_BASE_URL = process.env.A2A_URL ?? 'http://localhost:7777';
 
@@ -53,6 +60,32 @@ interface SendTaskInput {
 
 async function callSendTask(input: SendTaskInput) {
   const { taskId, message } = input;
+
+  // --- Mocking Logic --- 
+  if (MOCK_A2A_CALLS) {
+    console.error('[MOCK] Returning mock success for tasks/send');
+    // Simulate a successful A2A response structure
+    // Based on A2A spec, `tasks/send` returns the Task object
+    return {
+      // task object structure based on a2a.json schema
+      id: taskId,
+      sessionId: 'mock-session-id', // Example session ID
+      status: {
+        state: 'completed',
+        timestamp: new Date().toISOString(),
+        message: {
+          role: 'agent',
+          parts: [{ type: 'text', text: `Mock agent acknowledges task: ${taskId}` }]
+        }
+      },
+      history: [
+        message 
+      ],
+      artifacts: [] // No artifacts in this mock
+    };
+  }
+  // --- End Mocking Logic ---
+
   const req: JsonRpcRequest = {
     jsonrpc: '2.0',
     id: randomUUID(),
@@ -96,14 +129,22 @@ async function main() {
     async (args: SendTaskInput) => {
       const { taskId, message } = args;
       try {
-        const result = await callSendTask({ taskId, message });
+        // Cast the result to include the expected message structure for type safety
+        const result = await callSendTask({ taskId, message }) as { 
+          status?: { message?: { parts?: {type: string; text: string}[] } }
+          // Include other expected Task fields if needed for typing
+        };
+
+        // Extract the agent's reply parts from the result, default to generic message
+        const agentReplyParts: { type: 'text'; text: string }[] = (result?.status?.message?.parts?.map(part => ({ 
+          type: 'text' as const, // Ensure type is literally 'text'
+          text: part.text 
+        })) || [
+          { type: 'text', text: 'Mock task completed (no specific agent reply)' }
+        ]);
+
         return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
+          content: agentReplyParts, // Use the extracted parts directly
           isError: false,
         };
       } catch (err) {

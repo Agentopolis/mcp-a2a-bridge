@@ -4,6 +4,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { randomUUID } from 'node:crypto';
 
 // Helper to get base directory
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -19,7 +20,7 @@ describe('MCP-A2A Bridge Server via Stdio', () => {
       command: 'node',
       args: [path.join(projectRoot, 'dist', 'index.js')],
       cwd: projectRoot,
-      env: { ...process.env, A2A_URL: 'http://localhost:7778' },
+      env: { ...process.env, MOCK_A2A: 'true' },
     });
 
     client = new Client({
@@ -61,10 +62,35 @@ describe('MCP-A2A Bridge Server via Stdio', () => {
     });
   });
 
-  // TODO: Add test for calling the a2a_send_task tool
-  // This will require a mock A2A server running on A2A_URL
-  it.todo('should successfully call the a2a_send_task tool');
+  it('should successfully call the mocked a2a_send_task tool', async () => {
+    const taskId = `task-${randomUUID()}`;
+    const testMessage = { role: 'user', parts: [{ type: 'text', text: 'hello mock' }] };
 
-  it.todo('should return an error when calling a2a_send_task if A2A server fails');
+    const result = await client.callTool({
+      name: 'a2a_send_task',
+      arguments: {
+        taskId: taskId,
+        message: testMessage,
+      },
+    });
+
+    expect(result.isError).toBe(false);
+    // Assert the structure of the content
+    if (!Array.isArray(result.content) || result.content.length === 0 || typeof result.content[0] !== 'object' || result.content[0] === null || !('type' in result.content[0]) || !('text' in result.content[0])) {
+      throw new Error('Unexpected content structure in tool result');
+    }
+    expect(result.content[0].type).toBe('text');
+    
+    // Parse the JSON string in the result text
+    const responseData = JSON.parse(result.content[0].text as string);
+
+    expect(responseData.id).toBe(taskId);
+    expect(responseData.status.state).toBe('completed');
+    expect(responseData.history).toEqual([testMessage]);
+  });
+
+  // We can't easily test the non-mocked error case without a real server 
+  // or more complex mocking, so we leave this out for now.
+  // it.todo('should return an error when calling a2a_send_task if A2A server fails');
 
 }); 
