@@ -6,6 +6,7 @@ import fetch from 'node-fetch';
 import { A2ARegistry } from './registry.js';
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
+import type { RegisteredServer } from './registry.js';
 
 console.error(`[DEBUG] Node version: ${process.versions.node}`);
 console.error(`[DEBUG] Type of fetch: ${typeof fetch}`);
@@ -131,6 +132,79 @@ async function callSendTask(input: SendTaskInput & { serverId: string }) {
   return resp.result;
 }
 
+// Helper slugify (same logic as registry)
+function slugify(text: string): string {
+  if (!text) return '';
+  return text
+    .toString()
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/[^\w-]+/g, '')
+    .replace(/--+/g, '-')
+    .replace(/^-+/, '')
+    .replace(/-+$/, '');
+}
+
+// Set to track which dynamic tools have already been registered to avoid duplicates
+const dynamicToolNames = new Set<string>();
+
+function makeSkillToolName(serverId: string, skillId: string): string {
+  return `${slugify(serverId)}_${slugify(skillId)}`;
+}
+
+// Async helper to register skill tools based on current registry entries
+async function registerSkillTools(mcpServerInstance: McpServer): Promise<number> {
+  const servers: RegisteredServer[] = await registry.list();
+  let countAdded = 0;
+
+  for (const srv of servers) {
+    for (const skill of (srv.card.skills ?? []) as { id: string; name?: string; description?: string }[]) {
+      const toolName = makeSkillToolName(srv.id, skill.id);
+      if (dynamicToolNames.has(toolName)) continue; // Already registered
+
+      mcpServerInstance.tool(
+        toolName,
+        skill.description ?? `Invoke skill ${skill.id} on agent ${srv.card.name}`,
+        { message: z.string() },
+        async (args: { message: string }) => {
+          try {
+            const taskMessage = {
+              role: 'user',
+              parts: [{ type: 'text', text: args.message }],
+            };
+            const result = (await callSendTask({
+              serverId: srv.id,
+              taskId: randomUUID(),
+              message: taskMessage,
+            })) as { status?: { message?: { parts?: { type: string; text: string }[] } } };
+
+            const agentReplyParts: { type: 'text'; text: string }[] =
+              result?.status?.message?.parts?.map((part) => ({ type: 'text' as const, text: part.text })) ?? [
+                { type: 'text', text: 'No reply received.' },
+              ];
+
+            return {
+              content: agentReplyParts,
+              isError: false,
+            };
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            return {
+              content: [{ type: 'text', text: msg }],
+              isError: true,
+            };
+          }
+        },
+      );
+      dynamicToolNames.add(toolName);
+      countAdded += 1;
+    }
+  }
+
+  return countAdded;
+}
+
 // -----------------------------
 // MCP server setup
 // -----------------------------
@@ -147,6 +221,9 @@ async function main() {
       },
     },
   );
+
+  // Dynamically register tools for existing skills
+  await registerSkillTools(server);
 
   // Define tool for tasks/send
   server.tool(
