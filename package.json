@@ -1,19 +1,48 @@
 {
-    "name": "mcp-a2a",
+    "name": "@agentopolis/mcp-a2a-bridge",
     "version": "0.1.0",
     "description": "MCP server that bridges Agent-to-Agent (A2A) agents to Model Context Protocol via stdio",
     "type": "module",
     "main": "dist/index.js",
     "bin": {
-        "mcp-a2a": "dist/index.js"
+        "mcp-a2a-bridge": "dist/index.js"
     },
+    "files": [
+        "dist",
+        "README.md",
+        "LICENSE"
+    ],
     "scripts": {
         "build": "tsc",
         "start": "npm run build && node dist/index.js",
         "dev": "ts-node src/index.ts",
         "test": "npm run build && vitest run",
         "test:watch": "vitest",
-        "coverage": "vitest run --coverage"
+        "coverage": "vitest run --coverage",
+        "prepare": "npm run build"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/Agentopolis/mcp-a2a-bridge.git"
+    },
+    "keywords": [
+        "mcp",
+        "a2a",
+        "bridge",
+        "ai",
+        "agent",
+        "model context protocol",
+        "agent to agent",
+        "Agentopolis"
+    ],
+    "author": "Ryan Semerau <ryan@agentopolis.com>",
+    "license": "MIT",
+    "bugs": {
+        "url": "https://github.com/Agentopolis/mcp-a2a-bridge/issues"
+    },
+    "homepage": "https://github.com/Agentopolis/mcp-a2a-bridge#readme",
+    "publishConfig": {
+        "access": "public"
     },
     "dependencies": {
         "@modelcontextprotocol/sdk": "^1.11.0",

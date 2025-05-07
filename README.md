@@ -15,59 +15,78 @@
 
 ---
 
-## Installation
+## Installation & Usage
 
-The bridge will be published to npm.  Until then you can run it straight from the repo:
+There are a couple of ways to run the MCP-A2A Bridge:
+
+**1. From Source (e.g., for development):**
 
 ```bash
-# Clone and build
+# Clone and build the repository
 git clone https://github.com/Agentopolis/mcp-a2a-bridge.git
-cd agentopolis/mcp-a2a-bridge
-npm install && npm run build  
+cd mcp-a2a-bridge
+npm install && npm run build
 
 # Start the server (defaults to stdio transport)
 node dist/index.js \
-  --a2a-server-config-location=$HOME/.a2a-servers
+  --a2a-server-config-location=$HOME/.config/mcp-a2a-bridge/servers
 ```
 
-When published:
+**2. Using NPX (once published to npm):**
+
+This allows you to run the bridge without a global installation. `npx` will download the latest version if needed.
 
 ```bash
-npm install -g mcp-a2a-bridge
-mcp-a2a-bridge --a2a-server-config-location=$HOME/.a2a-servers
+npx @agentopolis/mcp-a2a-bridge --a2a-server-config-location=$HOME/.config/mcp-a2a-bridge/servers
 ```
 
-### Configuration directory
+**3. Global Installation (once published to npm):**
+
+This installs the `mcp-a2a-bridge` command globally on your system.
+
+```bash
+npm install -g @agentopolis/mcp-a2a-bridge
+
+# Then run it:
+mcp-a2a-bridge --a2a-server-config-location=$HOME/.config/mcp-a2a-bridge/servers
+```
+
+### Configuration Directory
 
 The bridge remembers every A2A server you register in small JSON files.  
-Location precedence:
+Location precedence for this directory is:
 
-1. `--a2a-server-config-location=/path/to/dir` CLI flag.
-32. `./a2a-servers` (cwd) – default.
+1. `--a2a-server-config-location=/path/to/your/config/dir` (CLI flag)
+2. `A2A_SERVER_CONFIG_LOCATION=/path/to/your/config/dir` (Environment variable)
+3. `./.a2a-servers` (Relative to current working directory – default if no other option is set)
 
-A typical entry lives at `<dir>/<serverId>.json`.
+A typical entry lives at `<config_dir>/<serverId>.json`.
+It's recommended to use a dedicated directory like `$HOME/.config/mcp-a2a-bridge/servers`.
 
 ---
 
 ## Running in Claude / Cursor
 
-Both editors can speak to local MCP servers over **stdio**.  Add the following to your config (example for Claude-desktop):
+Both editors can speak to local MCP servers over **stdio**.  Add the following to your client's configuration (example for Claude Desktop, adjust paths as necessary):
 
 ```jsonc
 {
   "mcpServers": {
     "MCP-A2A Bridge": {
-      "command": "node",
+      "command": "node", // Or 'mcp-a2a-bridge' if globally installed and in PATH
       "args": [
-        "/absolute/path/to/agentopolis/mcp-a2a/dist/index.js",
-        "--a2a-server-config-location=/Users/you/.a2a-servers"
+        // If running from source or npx without global install:
+        "/absolute/path/to/mcp-a2a-bridge/dist/index.js", 
+        // If globally installed, this arg might not be needed if 'mcp-a2a-bridge' is the command
+        "--a2a-server-config-location=/Users/you/.config/mcp-a2a-bridge/servers"
       ]
+      // "env": { "A2A_SERVER_CONFIG_LOCATION": "/Users/you/.config/mcp-a2a-bridge/servers" } // Alternative for config
     }
   }
 }
 ```
 
-Restart the client – the bridge appears as a new "provider".
+Restart the client – the bridge should appear as a new tool provider.
 
 ---
 
@@ -89,41 +108,47 @@ Restart the client – the bridge appears as a new "provider".
 
 ## Quickstart walkthrough
 
-1. **Register an A2A server** (replace the URL with yours):
+1. **Ensure the bridge is running** using one of the methods above.
+2. **Register an A2A server** (replace the URL with yours) via your MCP client (e.g., Claude, Cursor):
 
-   ```bash
-   # In your MCP client prompt
-   a2a_register_server {"url":"https://bella-luna-trattoria.agents.ai"}
+   ```json
+   // Tool call in your MCP client
+   {"tool_name": "a2a_register_server", "parameters": {"url":"https://bella-luna-trattoria.agents.ai"}}
    ```
 
-   You should see a confirmation message.
+   You should see a confirmation message from the bridge.
 
-2. **See what you have:**
+3. **See what you have:**
 
-   ```bash
-   a2a_list_servers
+   ```json
+   // Tool call in your MCP client
+   {"tool_name": "a2a_list_servers", "parameters": {}}
    ```
 
-3. **Invoke a skill**.  Suppose the restaurant agent exposes a skill id `provide-restaurant-info`.
+4. **Invoke a skill**.  Suppose the restaurant agent (`bella-luna-trattoria-assistant`) exposes a skill id `provide-restaurant-info`.
 
-   ```bash
-   bella-luna-trattoria-assistant_provide-restaurant-info {"message":"Tell me about your menu"}
+   ```json
+   // Tool call in your MCP client
+   {"tool_name": "bella-luna-trattoria-assistant_provide-restaurant-info", "parameters": {"message":"Tell me about your menu"}}
    ```
 
-4. **Clean up** (optional):
+5. **Clean up** (optional):
 
-   ```bash
-   a2a_remove_server {"serverId":"bella-luna-trattoria-assistant"}
+   ```json
+   // Tool call in your MCP client
+   {"tool_name": "a2a_remove_server", "parameters": {"serverId":"bella-luna-trattoria-assistant"}}
    ```
 
 ---
 
 ## Developer notes
 
-* Source files:  
+* Source files are in the `src/` directory relative to the `mcp-a2a-bridge` project root:  
   * [`src/index.ts`](./src/index.ts) – CLI & MCP server wiring.  
   * [`src/registry.ts`](./src/registry.ts) – lightweight JSON-file registry.
-* Build with `npm run build`; emits `dist/` for Node ≥18 (assumes built-in `fetch`).
+* Build with `npm run build`; emits JavaScript to `dist/` (targets Node ≥18, assumes built-in `fetch`).
+* For local development, you can use `npm run dev` to run with `ts-node`.
+* Set the environment variable `MOCK_A2A=true` to stub all outgoing HTTP calls to A2A servers (useful for offline testing or UI development).
 
 ---
 
