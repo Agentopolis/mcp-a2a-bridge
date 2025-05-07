@@ -236,8 +236,23 @@ async function main() {
     async (args: SendTaskInput & { serverId: string }) => {
       const { taskId, message, serverId } = args;
       try {
+        let a2aMessagePayload: unknown;
+
+        if (typeof message === 'string') {
+          a2aMessagePayload = {
+            role: 'user',
+            parts: [{ type: 'text', text: message }],
+            // Optionally, add a timestamp or other metadata if needed by default
+            // metadata: { clientTimestamp: new Date().toISOString() }
+          };
+        } else {
+          // Assumes if not a string, it's either undefined/null (if optional)
+          // or already a correctly structured A2A Message object.
+          a2aMessagePayload = message;
+        }
+
         // Cast the result to include the expected message structure for type safety
-        const result = await callSendTask({ serverId, taskId, message }) as { 
+        const result = await callSendTask({ serverId, taskId, message: a2aMessagePayload }) as {
           status?: { message?: { parts?: {type: string; text: string}[] } }
           // Include other expected Task fields if needed for typing
         };
