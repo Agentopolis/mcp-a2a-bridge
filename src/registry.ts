@@ -4,9 +4,9 @@ import fetch from 'node-fetch';
 import { randomUUID } from 'node:crypto';
 
 // Helper to create a filesystem-friendly slug
-function slugify(text: string): string {
+export function slugify(text: string, maxLength?: number): string {
   if (!text) return '';
-  return text
+  let slug = text
     .toString()
     .toLowerCase()
     .trim()
@@ -15,6 +15,12 @@ function slugify(text: string): string {
     .replace(/--+/g, '-')         // Replace multiple - with single -
     .replace(/^-+/, '')             // Trim - from start of text
     .replace(/-+$/, '');            // Trim - from end of text
+
+  if (maxLength && slug.length > maxLength) {
+    slug = slug.substring(0, maxLength);
+    slug = slug.replace(/-+$/, ''); // Remove trailing hyphen if cut off
+  }
+  return slug;
 }
 
 // Shape of an A2A agent card based on a2a.json schema
@@ -37,6 +43,8 @@ export interface RegisteredServer {
   addedAt: string; // ISO timestamp
 }
 
+const MAX_SERVER_ID_SLUG_LENGTH = 20;
+
 /**
  * Persists A2A server registrations on the local filesystem.
  * Each server is stored as a separate JSON file: <dir>/<registrationId>.json
@@ -53,19 +61,17 @@ export class A2ARegistry {
     console.error(`[A2ARegistry] Initialized. Loaded ${this.cache.size} servers from ${this.dir} into cache.`);
   }
 
-  private filePath(id: string) {
-    return path.join(this.dir, `${id}.json`);
+  private filePath(sluggedId: string) {
+    return path.join(this.dir, `${sluggedId}.json`);
   }
 
   private async _readServerFile(filePath: string): Promise<RegisteredServer | undefined> {
     try {
       const raw = await fs.readFile(filePath, 'utf-8');
-      const server = JSON.parse(raw) as RegisteredServer;
-      // Optional: Add validation here if needed (e.g., check for essential fields)
-      return server;
+      return JSON.parse(raw) as RegisteredServer;
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
-        console.warn(`[A2ARegistry] Failed to read or parse server file ${filePath}:`, err);
+        console.warn(`[A2ARegistry] Failed to read/parse ${filePath}:`, err);
       }
       return undefined;
     }
@@ -78,15 +84,19 @@ export class A2ARegistry {
       for (const f of files) {
         if (!f.endsWith('.json')) continue;
         const server = await this._readServerFile(path.join(this.dir, f));
-        if (server?.id) { // Ensure server and its ID are valid
-            this.cache.set(slugify(server.id), server);
+        if (server?.id) {
+            // The ID stored in the RegisteredServer object is the one we use for the cache key.
+            // This ID should already be the shortened, final version.
+            this.cache.set(server.id, server);
+        } else {
+            console.warn(`[A2ARegistry] Server file ${f} missing valid ID, skipping.`);
         }
       }
-      console.error(`[A2ARegistry] Reloaded servers. Found ${this.cache.size} valid configurations in ${this.dir}.`);
+      console.error(`[A2ARegistry] Reloaded. Found ${this.cache.size} valid configurations.`);
       return { count: this.cache.size };
     } catch (err) {
-      console.error(`[A2ARegistry] Failed to reload servers from directory ${this.dir}:`, err);
-      return { count: 0 }; // Return 0 if directory read fails
+      console.error(`[A2ARegistry] Failed to reload servers from ${this.dir}:`, err);
+      return { count: 0 };
     }
   }
 
@@ -100,89 +110,103 @@ export class A2ARegistry {
     let card: AgentCard;
     try {
       const resp = await fetch(cardEndpoint);
-      if (!resp.ok) {
-        throw new Error(`Failed to fetch agent card from ${cardEndpoint}: HTTP ${resp.status}`);
-      }
+      if (!resp.ok) throw new Error(`Fetch card ${cardEndpoint} failed: ${resp.status}`);
       card = (await resp.json()) as AgentCard;
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.error(`[A2ARegistry] Error fetching/parsing agent card from ${cardEndpoint}: ${message}`);
-      throw new Error(`Could not retrieve/parse agent card. Details: ${message}`);
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error(`[A2ARegistry] Fetch/parse card from ${cardEndpoint} error: ${msg}`);
+      throw new Error(`Could not retrieve/parse agent card. Details: ${msg}`);
     }
     
-
-    // Validate required fields from the card as per a2a.json
     const requiredFields: (keyof AgentCard)[] = ['name', 'url', 'version', 'capabilities', 'skills'];
     for (const field of requiredFields) {
-      if (card[field] === undefined || card[field] === null || (typeof card[field] === 'string' && (card[field] as string).trim() === '')) {
-        throw new Error(`Agent card from ${cardEndpoint} is missing/invalid required field: "${String(field)}"`);
+      if (!card[field] || (typeof card[field] === 'string' && !(card[field] as string).trim())) {
+        throw new Error(`Agent card from ${cardEndpoint} missing/invalid required field: "${String(field)}"`);
       }
     }
     if (!Array.isArray(card.skills)) {
-         throw new Error(`Agent card from ${cardEndpoint} has an invalid "skills" field: not an array.`);
+         throw new Error(`Agent card from ${cardEndpoint} invalid "skills": not an array.`);
     }
 
-
-    // Determine the ID for this registration
     let registrationId: string;
-    if (card.id && typeof card.id === 'string' && card.id.trim().length > 0) {
-      registrationId = slugify(card.id); // Slugify even if provided, for consistency
-    } else if (card.name && typeof card.name === 'string' && card.name.trim().length > 0) {
-      const sluggedName = slugify(card.name);
-      if (sluggedName.length > 0) {
-        registrationId = sluggedName;
+
+    // Check if card.id is a usable, non-empty string
+    if (card.id && typeof card.id === 'string' && card.id.trim()) {
+      const trimmedCardId = card.id.trim(); // Use the trimmed version for slugify
+      const sluggedCardId = slugify(trimmedCardId, MAX_SERVER_ID_SLUG_LENGTH);
+
+      if (sluggedCardId) { // Successfully slugified to a non-empty string
+        registrationId = sluggedCardId;
+        // Using console.log for informational message about successful ID use
+        console.log(`[A2ARegistry] Using card.id "${trimmedCardId}" (slugged to "${registrationId}") for server from ${cardEndpoint}.`);
       } else {
-        registrationId = randomUUID(); // Fallback if name slugs to empty
+        // card.id was a non-empty string, but slugified to an empty string (e.g., contained only symbols)
+        console.warn(`[A2ARegistry] Card ID "${trimmedCardId}" from ${cardEndpoint} slugified to an empty string. Generating a UUID-based ID instead.`);
+        registrationId = randomUUID().substring(0, MAX_SERVER_ID_SLUG_LENGTH);
       }
     } else {
-      registrationId = randomUUID(); // Fallback if no id and no name
+      // card.id is missing, not a string, or an empty string (or only whitespace).
+      // Fallback to a UUID-based ID. Do not use card.name.
+      if (card.id !== undefined && card.id !== null) {
+        // card.id was provided but was invalid (e.g., empty string, non-string type)
+        console.warn(`[A2ARegistry] Invalid or empty card.id ("${card.id}") provided for server from ${cardEndpoint}. Generating a UUID-based ID.`);
+      } else {
+        // card.id was not provided at all (undefined or null)
+        console.warn(`[A2ARegistry] Card ID not provided for server from ${cardEndpoint}. Generating a UUID-based ID.`);
+      }
+      registrationId = randomUUID().substring(0, MAX_SERVER_ID_SLUG_LENGTH);
     }
-    
-    if (!registrationId) { // Should not happen with UUID fallback, but as a safeguard
-        console.warn(`[A2ARegistry] Could not determine a valid registration ID for card from ${cardEndpoint}, falling back to UUID.`);
-        registrationId = randomUUID();
-    }
-
+    // The previous fallback `if (!registrationId) { ... }` is removed as registrationId should always be set now.
 
     const existingFromCache = this.cache.get(registrationId);
-    if (existingFromCache && existingFromCache.registrationUrl === registrationUrl && existingFromCache.card.url === card.url) {
-        console.error(`[A2ARegistry] Server with derived ID "${registrationId}" (URL: ${registrationUrl}, Card URL: ${card.url}) already registered and cached. Returning existing.`);
+    if (existingFromCache?.registrationUrl === registrationUrl && existingFromCache?.card.url === card.url) {
+        console.error(`[A2ARegistry] Server ID "${registrationId}" (URL: ${registrationUrl}) already cached. Returning existing.`);
         return existingFromCache;
     }
-    // Fallback: Check disk if not in cache or if details differ (edge case, cache should be source of truth after init/reload)
-    const existingFromDisk = await this._readServerFile(this.filePath(registrationId));
-    if (existingFromDisk && existingFromDisk.registrationUrl === registrationUrl && existingFromDisk.card.url === card.url) {
-      this.cache.set(registrationId, existingFromDisk); // Ensure cache consistency
-      console.error(`[A2ARegistry] Server with derived ID "${registrationId}" (URL: ${registrationUrl}) found on disk and matched. Returning existing.`);
-      return existingFromDisk;
+    const diskEntry = await this._readServerFile(this.filePath(registrationId));
+    if (diskEntry?.registrationUrl === registrationUrl && diskEntry?.card.url === card.url) {
+      this.cache.set(registrationId, diskEntry); // Ensure cache consistency
+      console.error(`[A2ARegistry] Server ID "${registrationId}" (URL: ${registrationUrl}) on disk matched. Returning existing.`);
+      return diskEntry;
     }
 
     const entry: RegisteredServer = {
-      id: registrationId,
+      id: registrationId, 
       registrationUrl,
       card,
       addedAt: new Date().toISOString(),
     };
 
     await fs.writeFile(this.filePath(registrationId), JSON.stringify(entry, null, 2), 'utf-8');
-    this.cache.set(registrationId, entry); // Add to cache
-    console.error(`[A2ARegistry] Registered new server: ID "${registrationId}", Name: "${card.name}", SourceURL: ${registrationUrl}. Cached.`);
+    this.cache.set(registrationId, entry);
+    console.error(`[A2ARegistry] Registered new server: ID "${registrationId}", Name: "${card.name}".`);
     return entry;
   }
 
   /** Retrieve a server by its derived registration id */
   async get(id: string): Promise<RegisteredServer | undefined> {
-    const sluggedId = slugify(id);
-    if (this.cache.has(sluggedId)) {
-      return this.cache.get(sluggedId);
+    const sluggedIdToSearch = slugify(id, MAX_SERVER_ID_SLUG_LENGTH);
+    if (this.cache.has(sluggedIdToSearch)) {
+      return this.cache.get(sluggedIdToSearch);
     }
-    // Fallback: try to load from disk if not in cache (e.g., if file added manually after init/reload)
-    const serverFromFile = await this._readServerFile(this.filePath(sluggedId));
-    if (serverFromFile) {
-      this.cache.set(sluggedId, serverFromFile); // Add to cache if found on disk
-      return serverFromFile;
+    const serverFromFile = await this._readServerFile(this.filePath(sluggedIdToSearch));
+    if (!serverFromFile) return undefined; // File not found or unreadable
+
+    // The ID in the file *is the canonical, already shortened ID*. Match against that.
+    if (serverFromFile.id === sluggedIdToSearch) {
+        this.cache.set(sluggedIdToSearch, serverFromFile);
+        return serverFromFile;
     }
-    return undefined;
+    // This case implies the filename (sluggedIdToSearch) doesn't match the ID stored inside the file.
+    // This could happen if a file was manually renamed or its content ID changed.
+    // For consistency, we prioritize the filename as the key if it exists.
+    // However, our registration process ensures filename matches internal ID.
+    // If they don't match, it suggests external tampering or a bug.
+    console.warn(`[A2ARegistry] File found for key '${sluggedIdToSearch}', but its internal ID '${serverFromFile.id}' differs. Returning based on filename key if content is valid.`);
+    // As a safety, we could re-validate serverFromFile.id here if needed.
+    // For now, if file exists at path derived from sluggedIdToSearch, and it's a valid RegisteredServer, return it.
+    this.cache.set(sluggedIdToSearch, serverFromFile); // Cache it under the filename-derived key
+    return serverFromFile; 
   }
 
   /** List all registered servers */
@@ -193,42 +217,24 @@ export class A2ARegistry {
   }
 
   async remove(id: string): Promise<boolean> {
-    const sluggedId = slugify(id);
-    const filePath = this.filePath(sluggedId);
+    const sluggedIdToRemove = slugify(id, MAX_SERVER_ID_SLUG_LENGTH);
+    const filePath = this.filePath(sluggedIdToRemove);
     try {
-      // Check if it exists in cache or on disk before attempting to delete
-      const existsInCache = this.cache.has(sluggedId);
+      const existsInCache = this.cache.has(sluggedIdToRemove);
       let existsOnDisk = false;
-      try {
-        await fs.access(filePath); // Check if file exists and is accessible
-        existsOnDisk = true;
-      } catch {
-        // File does not exist or is not accessible
-        existsOnDisk = false;
-      }
+      try { await fs.access(filePath); existsOnDisk = true; } catch { /* ignore */ }
 
       if (!existsInCache && !existsOnDisk) {
-        console.error(`[A2ARegistry] Attempted to remove server ID "${sluggedId}", but it was not found.`);
-        return false; // Not found
+        console.error(`[A2ARegistry] Remove failed: Server ID "${sluggedIdToRemove}" not found.`);
+        return false;
       }
-
-      if (existsOnDisk) {
-        await fs.unlink(filePath); // Delete the file
-      }
-      
-      const removedFromCache = this.cache.delete(sluggedId); // Remove from cache
-
-      if (existsOnDisk) {
-        console.error(`[A2ARegistry] Successfully removed server ID "${sluggedId}" from disk and cache.`);
-      } else if (removedFromCache) {
-         console.error(`[A2ARegistry] Successfully removed server ID "${sluggedId}" from cache (was not on disk).`);
-      } 
-      // If neither, it means it wasn't found (handled by the first check)
-
-      return true; // Successfully removed or was already not present in one of the locations but action taken
+      if (existsOnDisk) await fs.unlink(filePath);
+      this.cache.delete(sluggedIdToRemove);
+      console.error(`[A2ARegistry] Removed server ID "${sluggedIdToRemove}".`);
+      return true;
     } catch (err) {
-      console.error(`[A2ARegistry] Error removing server ID "${sluggedId}":`, err);
-      return false; // Indicate failure
+      console.error(`[A2ARegistry] Error removing "${sluggedIdToRemove}":`, err);
+      return false;
     }
   }
 } 

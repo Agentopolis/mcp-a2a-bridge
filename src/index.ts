@@ -3,7 +3,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import fetch from 'node-fetch';
-import { A2ARegistry } from './registry.js';
+import { A2ARegistry, slugify } from './registry.js';
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
 import type { RegisteredServer } from './registry.js';
@@ -137,25 +137,17 @@ async function callSendTask(input: SendTaskInput & { serverId: string }) {
   return resp.result;
 }
 
-// Helper slugify (same logic as registry)
-function slugify(text: string): string {
-  if (!text) return '';
-  return text
-    .toString()
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, '-')
-    .replace(/[^\w-]+/g, '')
-    .replace(/--+/g, '-')
-    .replace(/^-+/, '')
-    .replace(/-+$/, '');
-}
-
 // Set to track which dynamic tools have already been registered to avoid duplicates
 const dynamicToolNames = new Set<string>();
 
+const MAX_SKILL_ID_SLUG_LENGTH = 20; // Define a max length for skill ID part
+
 function makeSkillToolName(serverId: string, skillId: string): string {
-  return `${slugify(serverId)}_${slugify(skillId)}`;
+  // serverId is already the shortened/slugified ID from the registry
+  const sluggedSkillId = slugify(skillId, MAX_SKILL_ID_SLUG_LENGTH);
+  // Ensure sluggedSkillId is not empty, fallback if necessary
+  const finalSkillIdPart = sluggedSkillId.length > 0 ? sluggedSkillId : randomUUID().substring(0, MAX_SKILL_ID_SLUG_LENGTH).replace(/-/g, '');
+  return `${serverId}_${finalSkillIdPart}`;
 }
 
 // Async helper to register skill tools based on current registry entries
