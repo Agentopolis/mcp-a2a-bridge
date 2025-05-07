@@ -138,10 +138,10 @@ export class A2ARegistry {
       if (sluggedCardId) { // Successfully slugified to a non-empty string
         registrationId = sluggedCardId;
         // Using console.log for informational message about successful ID use
-        console.log(`[A2ARegistry] Using card.id "${trimmedCardId}" (slugged to "${registrationId}") for server from ${cardEndpoint}.`);
+        console.error(`[A2ARegistry] Using card.id "${trimmedCardId}" (slugged to "${registrationId}") for server from ${cardEndpoint}.`);
       } else {
         // card.id was a non-empty string, but slugified to an empty string (e.g., contained only symbols)
-        console.warn(`[A2ARegistry] Card ID "${trimmedCardId}" from ${cardEndpoint} slugified to an empty string. Generating a UUID-based ID instead.`);
+        console.error(`[A2ARegistry] Card ID "${trimmedCardId}" from ${cardEndpoint} slugified to an empty string. Generating a UUID-based ID instead.`);
         registrationId = randomUUID().substring(0, MAX_SERVER_ID_SLUG_LENGTH);
       }
     } else {
@@ -149,10 +149,10 @@ export class A2ARegistry {
       // Fallback to a UUID-based ID. Do not use card.name.
       if (card.id !== undefined && card.id !== null) {
         // card.id was provided but was invalid (e.g., empty string, non-string type)
-        console.warn(`[A2ARegistry] Invalid or empty card.id ("${card.id}") provided for server from ${cardEndpoint}. Generating a UUID-based ID.`);
+        console.error(`[A2ARegistry] Invalid or empty card.id ("${card.id}") provided for server from ${cardEndpoint}. Generating a UUID-based ID.`);
       } else {
         // card.id was not provided at all (undefined or null)
-        console.warn(`[A2ARegistry] Card ID not provided for server from ${cardEndpoint}. Generating a UUID-based ID.`);
+        console.error(`[A2ARegistry] Card ID not provided for server from ${cardEndpoint}. Generating a UUID-based ID.`);
       }
       registrationId = randomUUID().substring(0, MAX_SERVER_ID_SLUG_LENGTH);
     }
@@ -202,7 +202,7 @@ export class A2ARegistry {
     // For consistency, we prioritize the filename as the key if it exists.
     // However, our registration process ensures filename matches internal ID.
     // If they don't match, it suggests external tampering or a bug.
-    console.warn(`[A2ARegistry] File found for key '${sluggedIdToSearch}', but its internal ID '${serverFromFile.id}' differs. Returning based on filename key if content is valid.`);
+    console.error(`[A2ARegistry] File found for key '${sluggedIdToSearch}', but its internal ID '${serverFromFile.id}' differs. Returning based on filename key if content is valid.`);
     // As a safety, we could re-validate serverFromFile.id here if needed.
     // For now, if file exists at path derived from sluggedIdToSearch, and it's a valid RegisteredServer, return it.
     this.cache.set(sluggedIdToSearch, serverFromFile); // Cache it under the filename-derived key
