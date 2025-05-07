@@ -1,6 +1,6 @@
 {
     "name": "@agentopolis/mcp-a2a-bridge",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "description": "MCP server that bridges Agent-to-Agent (A2A) agents to Model Context Protocol via stdio",
     "type": "module",
     "main": "dist/index.js",
