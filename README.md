@@ -29,7 +29,7 @@ npm install && npm run build
 
 # Start the server (defaults to stdio transport)
 node dist/index.js \
-  --a2a-server-config-location=$HOME/.config/mcp-a2a-bridge/servers
+  --a2a-server-config-dir=$HOME/.config/mcp-a2a-bridge/servers
 ```
 
 **2. Using NPX (once published to npm):**
@@ -37,7 +37,7 @@ node dist/index.js \
 This allows you to run the bridge without a global installation. `npx` will download the latest version if needed.
 
 ```bash
-npx @agentopolis/mcp-a2a-bridge --a2a-server-config-location=$HOME/.config/mcp-a2a-bridge/servers
+npx @agentopolis/mcp-a2a-bridge --a2a-server-config-dir=$HOME/.config/mcp-a2a-bridge/servers
 ```
 
 **3. Global Installation (once published to npm):**
@@ -48,7 +48,7 @@ This installs the `mcp-a2a-bridge` command globally on your system.
 npm install -g @agentopolis/mcp-a2a-bridge
 
 # Then run it:
-mcp-a2a-bridge --a2a-server-config-location=$HOME/.config/mcp-a2a-bridge/servers
+mcp-a2a-bridge --a2a-server-config-dir=$HOME/.config/mcp-a2a-bridge/servers
 ```
 
 ### Configuration Directory
@@ -56,12 +56,11 @@ mcp-a2a-bridge --a2a-server-config-location=$HOME/.config/mcp-a2a-bridge/servers
 The bridge remembers every A2A server you register in small JSON files.  
 Location precedence for this directory is:
 
-1. `--a2a-server-config-location=/path/to/your/config/dir` (CLI flag)
-2. `A2A_SERVER_CONFIG_LOCATION=/path/to/your/config/dir` (Environment variable)
-3. `./.a2a-servers` (Relative to current working directory – default if no other option is set)
+1. `--a2a-server-config-dir=/path/to/your/config/dir` (CLI flag)
+2. `./.mcp-a2a-servers` (Relative to current working directory – default if the CLI flag is not set)
 
 A typical entry lives at `<config_dir>/<serverId>.json`.
-It's recommended to use a dedicated directory like `$HOME/.config/mcp-a2a-bridge/servers`.
+It's recommended to use a dedicated directory like `$HOME/.config/mcp-a2a-bridge/servers` via the CLI flag.
 
 ---
 
@@ -78,9 +77,9 @@ Both editors can speak to local MCP servers over **stdio**.  Add the following t
         // If running from source or npx without global install:
         "/absolute/path/to/mcp-a2a-bridge/dist/index.js", 
         // If globally installed, this arg might not be needed if 'mcp-a2a-bridge' is the command
-        "--a2a-server-config-location=/Users/you/.config/mcp-a2a-bridge/servers"
+        "--a2a-server-config-dir=/Users/you/.config/mcp-a2a-bridge/servers"
       ]
-      // "env": { "A2A_SERVER_CONFIG_LOCATION": "/Users/you/.config/mcp-a2a-bridge/servers" } // Alternative for config
+      // "env": { "A2A_SERVER_CONFIG_LOCATION": "/Users/you/.config/mcp-a2a-bridge/servers" } // Alternative for config (REMOVED)
     }
   }
 }

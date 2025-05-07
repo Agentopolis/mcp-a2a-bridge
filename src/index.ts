@@ -59,13 +59,18 @@ const MOCK_A2A_CALLS = process.env.MOCK_A2A === 'true';
 // -----------------------------------
 
 const argv = yargs(hideBin(process.argv))
-  .option('a2a-server-config-location', {
+  .option('a2a-server-config-dir', {
     type: 'string',
     describe: 'Directory path where A2A server registrations are stored',
   })
   .parseSync();
 
-const REGISTRY_DIR = (argv['a2a-server-config-location'] as string) || process.env.A2A_SERVER_CONFIG_LOCATION || './a2a-servers';
+const cliConfigPath = argv['a2a-server-config-dir'] as string | undefined;
+
+// If no path is provided via CLI, default to a hidden directory 
+// in the current working directory.
+const REGISTRY_DIR = cliConfigPath || './.mcp-a2a-servers';
+console.error(`[DEBUG] Using registry directory: ${REGISTRY_DIR}`);
 
 // Initialize registry (will create dir if missing)
 const registry = new A2ARegistry(REGISTRY_DIR);
