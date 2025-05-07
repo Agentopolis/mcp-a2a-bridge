@@ -46,7 +46,7 @@ Restart or refresh your application after adding this configuration. The bridge 
 Send these prompts to your AI client:
 1. Add an A2A server using its url
 ```
-add this a2a server: https://a2a-demos.agentopolis.ai/restaurant-bella-luna
+add this a2a server: https://a2a-demos.agentopolis.ai/bella-restaurant
 ```
 2. Ask what skills the A2A server has:
 ```
