@@ -64,14 +64,23 @@ Make a reservation for two for thursday at 8pm, under the name Ryan
 ## Screenshots using Claude Desktop
 
 1. Adding an A2A server
+
 ![Adding an A2A server](./assets/images/10-adding-a-server.png)
+
 2. Checking the MCP Tools
+
 ![Checking the MCP Tools](./assets/images/20-claude-mcp-tools.png)
+
 4. Asking about specials
+
 ![Asking about specials](./assets/images/50-asking-about-specials.png)
+
 5. Making a reservation
+
 ![Making a reservation](./assets/images/60-making-a-reservation.png)
+
 6. Listing servers
+
 ![Listing servers](./assets/images/70-listing-servers.png)
 
 ## Configuration Directory
