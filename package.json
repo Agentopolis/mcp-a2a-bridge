@@ -13,9 +13,9 @@
         "LICENSE"
     ],
     "scripts": {
-        "build": "tsc",
+        "build": "tsc && echo '#!/usr/bin/env node' > dist/index.js.tmp && cat dist/index.js >> dist/index.js.tmp && mv dist/index.js.tmp dist/index.js && chmod +x dist/index.js",
         "start": "npm run build && node dist/index.js",
-        "dev": "ts-node src/index.ts",
+        "dev": "node --loader ts-node/esm src/index.ts",
         "test": "npm run build && vitest run",
         "test:watch": "vitest",
         "coverage": "vitest run --coverage",
